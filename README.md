@@ -1,2 +1,0 @@
-# PaddlePaddle-DocCRT
-基于百度ERNIE和Pycorrector的文本编辑和批改的软件
