@@ -9,7 +9,10 @@ import re
 from . import globalvars
 import sys
 from .textblock import TextItem, UpdateView
-
+from PIL import ImageGrab
+from paddleocr import PaddleOCR
+import numpy as np
+import pyperclip
 from pycorrector.ernie.ernie_corrector import ErnieCorrector
 corrector = ErnieCorrector()
 
@@ -18,86 +21,90 @@ SelStatus = globalvars.SelStatus()
 
 
 class TextItemReload(TextItem, QPushButton):
-  right_click = Signal(QPoint)
-  def __init__(self, textBlock=None, text="", preTextItem=False, font=None, textColor=None, backgroundColor=False,
+    right_click = Signal(QPoint)
+
+    def __init__(self, textBlock=None, text="", preTextItem=False, font=None, textColor=None, backgroundColor=False,
                  updateView=UpdateView.updateAll, corrected_text=[], parent=None):
-    TextItem.__init__(self, textBlock, text, preTextItem, font, textColor, backgroundColor, updateView)
-    QPushButton.__init__(self, parent)
-    self.oldText = text
-    self.oldTextColor = textColor
-    self.setTextColor(QColor(255, 0, 0, 150))
-    self.right_click.connect(self.popUpMenu)
-    self.setStyleSheet('border:0px; background-color: rgba(255,255,255,0)')
-    self.updateAllTextFragments = self.updateAllTextFragmentsReload(self.updateAllTextFragments)
-    self.updateAllTextFragments()
-    self.corrected_text = corrected_text
-    self.correct_menu = QMenu()
-    ignore = self.correct_menu.addAction("忽略此错误")
-    ignore.triggered.connect(self.ignore_action)
-    self.correct_menu.addSeparator()
-    undo = self.correct_menu.addAction("撤销此更改")
-    undo.triggered.connect(self.undo_action)
-    self.correct_menu.addSeparator()
-    self.sub_actions = []
-    self._set_sub_actions()
+        TextItem.__init__(self, textBlock, text, preTextItem,
+                          font, textColor, backgroundColor, updateView)
+        QPushButton.__init__(self, parent)
+        self.oldText = text
+        self.oldTextColor = textColor
+        self.setTextColor(QColor(255, 0, 0, 150))
+        self.right_click.connect(self.popUpMenu)
+        self.setStyleSheet('border:0px; background-color: rgba(255,255,255,0)')
+        self.updateAllTextFragments = self.updateAllTextFragmentsReload(
+            self.updateAllTextFragments)
+        self.updateAllTextFragments()
+        self.corrected_text = corrected_text
+        self.correct_menu = QMenu()
+        ignore = self.correct_menu.addAction("忽略此错误")
+        ignore.triggered.connect(self.ignore_action)
+        self.correct_menu.addSeparator()
+        undo = self.correct_menu.addAction("撤销此更改")
+        undo.triggered.connect(self.undo_action)
+        self.correct_menu.addSeparator()
+        self.sub_actions = []
+        self._set_sub_actions()
 
-  def ignore_action(self):
-    self.setTextColor(self.oldTextColor)
+    def ignore_action(self):
+        self.setTextColor(self.oldTextColor)
 
-  def undo_action(self):
-    self.setText(self.oldText)
+    def undo_action(self):
+        self.setText(self.oldText)
 
-  def updateAllTextFragmentsReload(self, func):
-    def __wrap__():
-      func()
-      self.resize(self.textFragments[-1].width, self.textFragments[-1].lineHeight)
-      self.move(self.getPos())
-      self.hide()
-      self.show()
-    return __wrap__
+    def updateAllTextFragmentsReload(self, func):
+        def __wrap__():
+            func()
+            self.resize(self.textFragments[-1].width,
+                        self.textFragments[-1].lineHeight)
+            self.move(self.getPos())
+            self.hide()
+            self.show()
+        return __wrap__
 
-  def getPos(self):
-    pos = QPoint(self.textFragments[-1].posX, self.textFragments[-1].posY)
-    return pos
+    def getPos(self):
+        pos = QPoint(self.textFragments[-1].posX, self.textFragments[-1].posY)
+        return pos
 
-  def enterEvent(self, event):
-    print("Enter")
-    self.oldBackgroundColor = self.backgroundColor
-    new_color = QColor(0, 0, 255, 125)
-    self.setBackgroundColor(new_color)
-    self.updateView()
+    def enterEvent(self, event):
+        print("Enter")
+        self.oldBackgroundColor = self.backgroundColor
+        new_color = QColor(0, 0, 255, 125)
+        self.setBackgroundColor(new_color)
+        self.updateView()
 
-  def updateView(self):
-    self.textBlock.updateSize()
-    global CurrentTextItemIndex
-    CurrentTextItemIndex = len(self.text)  # index更新到到item尾
-    self.textBlock.updateCursor()  # 光标更新
+    def updateView(self):
+        self.textBlock.updateSize()
+        global CurrentTextItemIndex
+        CurrentTextItemIndex = len(self.text)  # index更新到到item尾
+        self.textBlock.updateCursor()  # 光标更新
 
-  def leaveEvent(self, event):
-    print("Leave")
-    self.setBackgroundColor(self.oldBackgroundColor)
-    self.updateView()
+    def leaveEvent(self, event):
+        print("Leave")
+        self.setBackgroundColor(self.oldBackgroundColor)
+        self.updateView()
 
-  def mousePressEvent(self, event):
-    pos = event.pos()
-    gp = self.mapToGlobal(pos)
-    if event.buttons() == Qt.RightButton:
-      self.right_click.emit(gp)
+    def mousePressEvent(self, event):
+        pos = event.pos()
+        gp = self.mapToGlobal(pos)
+        if event.buttons() == Qt.RightButton:
+            self.right_click.emit(gp)
 
-  def popUpMenu(self, pos):
-    print("popUpMenu")
-    self.correct_menu.popup(pos)
+    def popUpMenu(self, pos):
+        print("popUpMenu")
+        self.correct_menu.popup(pos)
 
-  def _set_sub_actions(self):
-    if self.corrected_text:
-      for text in self.corrected_text:
-        sub_action = self.correct_menu.addAction(text)
-        sub_action.triggered.connect(self.modify(text))
+    def _set_sub_actions(self):
+        if self.corrected_text:
+            for text in self.corrected_text:
+                sub_action = self.correct_menu.addAction(text)
+                sub_action.triggered.connect(self.modify(text))
 
-  def modify(self, text):
-    def __later__():
-      self.setText(text)
-    return __later__
+    def modify(self, text):
+        def __later__():
+            self.setText(text)
+        return __later__
 
 
 class DocumentScrollArea(ScrollArea):
@@ -125,7 +132,8 @@ class FontFamiliesPanel(ListWidget):
         fontDataBase.reverse()  # 反转列表，使得中文位于前面
         for f in fontDataBase:
             button = PushButton(f)
-            button.clicked.connect(self.itemClicked(f))  # 不能直接用 lambda f=f:self.func(f) 不知道为什么
+            # 不能直接用 lambda f=f:self.func(f) 不知道为什么
+            button.clicked.connect(self.itemClicked(f))
             font = QFont(f, pointSize=10)
             button.setFont(font)  # 设置字体
             button.resize(button.sizeHint())
@@ -245,9 +253,12 @@ class ToolWidget(QWidget):
         self.mainLayout = QHBoxLayout()  # 总体布局
 
         # 文件管理布局
-        saveButton = ToolButton(QIcon("images/save.png"), "", toolTip="保存", clicked=self.saveDocument,shortcut="ctrl+s")
-        saveAsButton = ToolButton(QIcon("images/saveas.png"), "", toolTip="另存为", clicked=self.saveDocumentAs,shortcut="ctr+shift+s")
-        openButton = ToolButton(QIcon("images/open.png"), "", toolTip="打开", clicked=self.openDocument,shortcut="ctrl+o")
+        saveButton = ToolButton(QIcon(
+            "images/save.png"), "", toolTip="保存", clicked=self.saveDocument, shortcut="ctrl+s")
+        saveAsButton = ToolButton(QIcon("images/saveas.png"), "", toolTip="另存为",
+                                  clicked=self.saveDocumentAs, shortcut="ctr+shift+s")
+        openButton = ToolButton(QIcon(
+            "images/open.png"), "", toolTip="打开", clicked=self.openDocument, shortcut="ctrl+o")
         newButton = ToolButton(QIcon("images/new.png"), "", toolTip="新建")
 
         fileLayout = QGridLayout()
@@ -257,44 +268,57 @@ class ToolWidget(QWidget):
         fileLayout.addWidget(saveAsButton, 1, 1)
 
         # 字体布局
-        GlobalVars.titleLevelsPanel = TitleLevelsPanel(func=self.setTitleLevel)  # func绑定到函数，修改标题等级时候调用
+        GlobalVars.titleLevelsPanel = TitleLevelsPanel(
+            func=self.setTitleLevel)  # func绑定到函数，修改标题等级时候调用
         GlobalVars.CurrentTitleLevel = GlobalVars.CurrentTitleLevel  # 重新赋值，刷新界面
 
-        GlobalVars.currentFontFamilyPanel = LineEditWithSubButton(self, toolTip="选择字体", subButton="itemButton")
-        GlobalVars.currentFontFamilyPanel.listWidget = FontFamiliesPanel(self.parent(), func=self.setFontFamily)
+        GlobalVars.currentFontFamilyPanel = LineEditWithSubButton(
+            self, toolTip="选择字体", subButton="itemButton")
+        GlobalVars.currentFontFamilyPanel.listWidget = FontFamiliesPanel(
+            self.parent(), func=self.setFontFamily)
 
-        GlobalVars.currentFontSizePanel = LineEditWithSubButton(self, toolTip="字体大小", subButton="itemButton")
-        GlobalVars.currentFontSizePanel.listWidget = FontSizePanel(self.parent(), func=self.setFontSize)
+        GlobalVars.currentFontSizePanel = LineEditWithSubButton(
+            self, toolTip="字体大小", subButton="itemButton")
+        GlobalVars.currentFontSizePanel.listWidget = FontSizePanel(
+            self.parent(), func=self.setFontSize)
 
         # 斜体设置
-        GlobalVars.currentFontItalicPanel = ToolButton(clicked=self.setFontItalic, subButton="itemButton")  # 斜体面板
+        GlobalVars.currentFontItalicPanel = ToolButton(
+            clicked=self.setFontItalic, subButton="itemButton")  # 斜体面板
         GlobalVars.currentFontItalicPanel.listWidget.addItem(
             ToolButton(icon=QIcon("images/italic.png"), toolTip="斜体", clicked=lambda: self.setFontItalic(True)))
         GlobalVars.currentFontItalicPanel.listWidget.addItem(
             ToolButton(icon=QIcon("images/notitalic.png"), toolTip="取消斜体",
                        clicked=lambda: self.setFontItalic(False)))
 
-        GlobalVars.currentFontItalicPanel.listWidget.setParent(self.parent())  # 设置父对象
+        GlobalVars.currentFontItalicPanel.listWidget.setParent(
+            self.parent())  # 设置父对象
         # 粗体设置 待完善，不同的粗度
-        GlobalVars.currentFontWeightPanel = ToolButton(self, clicked=self.setFontWeight, subButton="itemButton")  # 加粗面板
+        GlobalVars.currentFontWeightPanel = ToolButton(
+            self, clicked=self.setFontWeight, subButton="itemButton")  # 加粗面板
         GlobalVars.currentFontWeightPanel.listWidget.addItem(
             ToolButton(icon=QIcon("images/bold.png"), toolTip="加粗",
                        clicked=lambda: self.setFontWeight(QFont.Bold)))
         GlobalVars.currentFontWeightPanel.listWidget.addItem(
             ToolButton(icon=QIcon("images/unbold.png"), toolTip="取消加粗",
                        clicked=lambda: self.setFontWeight(False)))
-        GlobalVars.currentFontWeightPanel.listWidget.setParent(self.parent())  # doc是listwidget的父级
+        GlobalVars.currentFontWeightPanel.listWidget.setParent(
+            self.parent())  # doc是listwidget的父级
         GlobalVars.CurrentFont = GlobalVars.CurrentFont  # 更新与文字相关属性面板
 
-        GlobalVars.currentTextColorPanel = ToolButton("A", toolTip="设置文字颜色", clicked=self.setTextColor)
+        GlobalVars.currentTextColorPanel = ToolButton(
+            "A", toolTip="设置文字颜色", clicked=self.setTextColor)
         GlobalVars.CurrentTextColor = GlobalVars.CurrentTextColor  # 重新赋值，刷新界面
 
-        GlobalVars.currentBackgroundColorPanel = ToolButton(toolTip="设置背景色", clicked=self.setBackgroundColor)
+        GlobalVars.currentBackgroundColorPanel = ToolButton(
+            toolTip="设置背景色", clicked=self.setBackgroundColor)
         GlobalVars.CurrentBackgroundColor = GlobalVars.CurrentBackgroundColor  # 重新赋值，刷新界面
 
-        GlobalVars.correctorPushPanel = ToolButton("批", toolTip="批改所有内容", clicked=self.correctOP)  # 待完善
+        GlobalVars.correctorPushPanel = ToolButton(
+            "批", toolTip="批改所有内容", clicked=self.correctOP)  # 待完善
 
-        GlobalVars.certifyCorrector = ToolButton("定", toolTip="确定所有更改", clicked=self.certifyOP)
+        GlobalVars.certifyCorrector = ToolButton(
+            "定", toolTip="确定所有更改", clicked=self.certifyOP)
 
         GlobalVars.currentFontSuperScriptPanel = ToolButton(icon=QIcon("images/superscript.png"),
                                                             toolTip="上标")  # 上标待完善
@@ -302,6 +326,9 @@ class ToolWidget(QWidget):
         GlobalVars.currentFontSubScriptPanel = ToolButton(icon=QIcon("images/subscript.png"),
                                                           toolTip="下标")  # 下标待完善
         GlobalVars.currentFontSubScriptPanel.setEnabled(False)
+        GlobalVars.screenShotCapture = ToolButton(icon=QIcon('images/capture.png'),
+                                                  toolTip='截屏识别',
+                                                  clicked=self.screenShotCapture)
 
         font1Layout = QHBoxLayout()
         font1Layout.addWidget(GlobalVars.currentFontFamilyPanel)
@@ -311,6 +338,7 @@ class ToolWidget(QWidget):
         font2Layout.addWidget(GlobalVars.certifyCorrector)
         font2Layout.addWidget(GlobalVars.currentFontSuperScriptPanel)
         font2Layout.addWidget(GlobalVars.currentFontSubScriptPanel)
+        font2Layout.addWidget(GlobalVars.screenShotCapture)
         font2Layout.addWidget(GlobalVars.currentFontItalicPanel)
         font2Layout.addWidget(GlobalVars.currentFontWeightPanel)
         font2Layout.addWidget(GlobalVars.currentTextColorPanel)
@@ -320,15 +348,20 @@ class ToolWidget(QWidget):
         fontLayout.addLayout(font2Layout)
 
         # 段落相关设置
-        GlobalVars.alignLeftPanel = ToolButton(QIcon("images/alignleft.png"), "", toolTip="左对齐")  # 待完善
+        GlobalVars.alignLeftPanel = ToolButton(
+            QIcon("images/alignleft.png"), "", toolTip="左对齐")  # 待完善
         GlobalVars.alignLeftPanel.setEnabled(False)
-        GlobalVars.alignCenterPanel = ToolButton(QIcon("images/aligncenter.png"), "", toolTip="中对齐")  # 待完善
+        GlobalVars.alignCenterPanel = ToolButton(
+            QIcon("images/aligncenter.png"), "", toolTip="中对齐")  # 待完善
         GlobalVars.alignCenterPanel.setEnabled(False)
-        GlobalVars.alignRightPanel = ToolButton(QIcon("images/alignright.png"), "", toolTip="右对齐")  # 待完善
+        GlobalVars.alignRightPanel = ToolButton(
+            QIcon("images/alignright.png"), "", toolTip="右对齐")  # 待完善
         GlobalVars.alignRightPanel.setEnabled(False)
 
-        GlobalVars.currentLineSpacingPanel = LineEditWithSubButton(toolTip="设置行距大小", subButton="itemButton")
-        GlobalVars.currentLineSpacingPanel.listWidget = LineSpacingPanel(self.parent(), func=self.setLineSpacing)
+        GlobalVars.currentLineSpacingPanel = LineEditWithSubButton(
+            toolTip="设置行距大小", subButton="itemButton")
+        GlobalVars.currentLineSpacingPanel.listWidget = LineSpacingPanel(
+            self.parent(), func=self.setLineSpacing)
         GlobalVars.CurrentLineSpacing = GlobalVars.CurrentLineSpacing
 
         GlobalVars.currentLineSpacingPolicyPanel = ToolButton(clicked=self.setLineSpacingPolicy,
@@ -339,7 +372,8 @@ class ToolWidget(QWidget):
         GlobalVars.currentLineSpacingPolicyPanel.listWidget.addItem(
             ToolButton(icon=QIcon("images/relative_linespacing.png"), toolTip="相对行距",
                        clicked=lambda: self.setLineSpacingPolicy(GlobalVars.relLineSpacingPolicy)))
-        GlobalVars.currentLineSpacingPolicyPanel.listWidget.setParent(self.parent())
+        GlobalVars.currentLineSpacingPolicyPanel.listWidget.setParent(
+            self.parent())
         GlobalVars.CurrentLineSpacingPolicy = GlobalVars.CurrentLineSpacingPolicy  # 更新界面
 
         paragraph1Layout = QHBoxLayout()
@@ -372,7 +406,8 @@ class ToolWidget(QWidget):
                 file, format = QFileDialog.getSaveFileName(self, "保存文件", "files/" + document.title,
                                                            "网页格式(*.html);;所有(*)")
             else:
-                file, format = QFileDialog.getSaveFileName(self, "保存文件", "files/document", "网页格式(*.html);;所有(*)")
+                file, format = QFileDialog.getSaveFileName(
+                    self, "保存文件", "files/document", "网页格式(*.html);;所有(*)")
 
             if file:
                 if not document.title:  # 标题没有命名,自动定义文档标题
@@ -390,7 +425,8 @@ class ToolWidget(QWidget):
             name, suffix = os.path.basename(path).split(".")  # 名字和后缀
             newPath = os.path.dirname(path) + name + "1." + suffix
 
-            file, format = QFileDialog.getSaveFileName(self, "保存文件", newPath, "网页格式(*.html);;所有(*)")
+            file, format = QFileDialog.getSaveFileName(
+                self, "保存文件", newPath, "网页格式(*.html);;所有(*)")
 
             if file:
                 with open(file, "w", encoding="UTF-8") as f:
@@ -401,7 +437,8 @@ class ToolWidget(QWidget):
 
     def openDocument(self):
         # 待完善，判断是否保存现有文档或者新建文档选项卡
-        file, suffix = QFileDialog.getOpenFileName(self, "打开文件", "files", "网页格式(*.html)")
+        file, suffix = QFileDialog.getOpenFileName(
+            self, "打开文件", "files", "网页格式(*.html)")
         if file:
             with open(file, "r", encoding="UTF-8") as f:
                 document = self.analysisHtml(f)  # 解析html文档
@@ -411,68 +448,73 @@ class ToolWidget(QWidget):
                 print(True)
 
     def correctOP(self):
-      block = self.DocWidget.documentScrollArea.document.RootBlock
-      while block:
-        text = ''
-        index = 0
-        itemSiteList = []
-        textItem = block.RootTextItem
-        while textItem:
-          text += textItem.text
-          itemSiteList.append((textItem, index, index + len(textItem.text)))
-          index = index + len(textItem.text)
-          textItem = textItem.nextTextItem
-        results = corrector.correct(text)
-        if results[1]:
-          self.prepareCorrectGui(text, block, itemSiteList, results[1])
-        block = block.nextBlock
+        block = self.DocWidget.documentScrollArea.document.RootBlock
+        while block:
+            text = ''
+            index = 0
+            itemSiteList = []
+            textItem = block.RootTextItem
+            while textItem:
+                text += textItem.text
+                itemSiteList.append(
+                    (textItem, index, index + len(textItem.text)))
+                index = index + len(textItem.text)
+                textItem = textItem.nextTextItem
+            results = corrector.correct(text)
+            if results[1]:
+                self.prepareCorrectGui(text, block, itemSiteList, results[1])
+            block = block.nextBlock
 
     def certifyOP(self):
-      block = self.DocWidget.documentScrollArea.document.RootBlock
-      while block:
-        textItem = block.RootTextItem
-        while textItem:
-          if isinstance(textItem, TextItemReload):
-            font, textColor, backgroundColor = self.getItemAttrs(textItem)
-            textColor = textItem.oldTextColor
-            newTextItem = TextItem(block, textItem.text, textItem, font, textColor, backgroundColor)
-            oldTextItem = textItem
-            textItem = textItem.nextTextItem
-            oldTextItem.deleteLater()
-            oldTextItem.delTextItem()
-          else:
-            textItem = textItem.nextTextItem
-        block = block.nextBlock
+        block = self.DocWidget.documentScrollArea.document.RootBlock
+        while block:
+            textItem = block.RootTextItem
+            while textItem:
+                if isinstance(textItem, TextItemReload):
+                    font, textColor, backgroundColor = self.getItemAttrs(
+                        textItem)
+                    textColor = textItem.oldTextColor
+                    newTextItem = TextItem(
+                        block, textItem.text, textItem, font, textColor, backgroundColor)
+                    oldTextItem = textItem
+                    textItem = textItem.nextTextItem
+                    oldTextItem.deleteLater()
+                    oldTextItem.delTextItem()
+                else:
+                    textItem = textItem.nextTextItem
+            block = block.nextBlock
 
     def prepareCorrectGui(self, sourceText, block, itemSiteList, correctedText):
-      for textItem, startSite, endSite in itemSiteList:
-        font, textColor, backgroundColor = self.getItemAttrs(textItem)
-        for _, text, startIndex, endIndex in correctedText:
-          preText = sourceText[startSite:startIndex]
-          wrongText = sourceText[max(startSite, startIndex):min(endSite, endIndex)]
-          afterText = sourceText[endIndex:endSite]
-          # 无错误存在，直接跳过
-          if not wrongText:
-            continue
+        for textItem, startSite, endSite in itemSiteList:
+            font, textColor, backgroundColor = self.getItemAttrs(textItem)
+            for _, text, startIndex, endIndex in correctedText:
+                preText = sourceText[startSite:startIndex]
+                wrongText = sourceText[max(
+                    startSite, startIndex):min(endSite, endIndex)]
+                afterText = sourceText[endIndex:endSite]
+                # 无错误存在，直接跳过
+                if not wrongText:
+                    continue
 
-          if preText:
-            preTextItem = TextItem(block, preText, textItem.preTextItem, font, textColor, backgroundColor)
-            wrongTextItem = TextItemReload(block, wrongText, preTextItem, font, textColor, backgroundColor,
-                                           corrected_text=[text], parent=block)
-          else:
-            wrongTextItem = TextItemReload(block, wrongText, textItem.preTextItem, font, textColor, backgroundColor,
-                                           corrected_text=[text], parent=block)
-          if afterText:
-            textItem.setText(afterText)
-          else:
-            textItem.delTextItem()
-          startSite = endIndex
+                if preText:
+                    preTextItem = TextItem(
+                        block, preText, textItem.preTextItem, font, textColor, backgroundColor)
+                    wrongTextItem = TextItemReload(block, wrongText, preTextItem, font, textColor, backgroundColor,
+                                                   corrected_text=[text], parent=block)
+                else:
+                    wrongTextItem = TextItemReload(block, wrongText, textItem.preTextItem, font, textColor, backgroundColor,
+                                                   corrected_text=[text], parent=block)
+                if afterText:
+                    textItem.setText(afterText)
+                else:
+                    textItem.delTextItem()
+                startSite = endIndex
 
     def getItemAttrs(self, textItem):
-      font = textItem.font
-      textColor = textItem.textColor
-      backgroundColor = textItem.backgroundColor
-      return font, textColor, backgroundColor
+        font = textItem.font
+        textColor = textItem.textColor
+        backgroundColor = textItem.backgroundColor
+        return font, textColor, backgroundColor
 
     def setTextColor(self):
         color = QColorDialog.getColor(title="选择文字颜色")
@@ -608,7 +650,8 @@ class ToolWidget(QWidget):
         text = f.readline()
         while text:
             if text.startswith("<body"):
-                document.documentWidth = int(self.analysisStyle(text)["width"][:-2])  # 去掉px字符
+                document.documentWidth = int(self.analysisStyle(text)[
+                                             "width"][:-2])  # 去掉px字符
             if text.startswith("<title"):
                 document.title = self.analysisText(text)
             if text.startswith("<h1") or text.startswith("<h2") or text.startswith("<h3") or text.startswith("<h4"):
@@ -626,12 +669,14 @@ class ToolWidget(QWidget):
                 font = QFont()
                 font.setFamily(attr["font-family"])
                 font.setPointSize(int(attr["font-size"][0:-2]))
-                font.setItalic(True if attr['font-style'] == 'italic' else False)
+                font.setItalic(
+                    True if attr['font-style'] == 'italic' else False)
                 font.setBold(True if attr['font-weight'] == 'bold' else False)
 
                 textColor = attr["color"]
                 textColor = textColor[5:-1].split(",")
-                textColor = [int(textColor[i]) for i in range(3)] + [int(float(textColor[3]) * 255)]
+                textColor = [int(textColor[i]) for i in range(
+                    3)] + [int(float(textColor[3]) * 255)]
                 textColor = QColor(*textColor)
 
                 backgroundColor = attr["background-color"]
@@ -643,7 +688,8 @@ class ToolWidget(QWidget):
                         int(float(backgroundColor[3]) * 255)]
                     backgroundColor = QColor(*backgroundColor)
 
-                block.addTextItem(text, font=font, textColor=textColor, backgroundColor=backgroundColor)
+                block.addTextItem(
+                    text, font=font, textColor=textColor, backgroundColor=backgroundColor)
             text = f.readline()
         return document
 
@@ -659,6 +705,22 @@ class ToolWidget(QWidget):
         text = re.search(">.*<", text).group()
         text = text[1:-1]
         return text
+
+    def screenShotCapture(self):
+        # RGBA to RGB
+        img = ImageGrab.grabclipboard()
+        if (img is None):
+          print('Unable to read image from clipboard, please check with win + V')
+          return
+        img_ndarray = np.array(img.convert('RGB'))
+        ocr = PaddleOCR(use_angle_cls=True, lang="ch", use_gpu=False)
+        result = ocr.ocr(img_ndarray, cls=True)
+        text = ''
+        for line in result:
+          text += line[1][0]
+        # Copy the content to the clipboard
+        pyperclip.copy(text)
+        print('Recognize succeed, press CTRL + V to paste it into the text box')
 
 
 class DocWidget(QWidget):
@@ -706,11 +768,16 @@ def initialize():
     GlobalVars.CurrentFont = QFont("微软雅黑", pointSize=12)
 
     # 标题格式待完善，从设置提取
-    GlobalVars.T0 = globalvars.TitleLevel("正文", QFont("微软雅黑", pointSize=12, ), toHtmlFormat="p")
-    GlobalVars.T1 = globalvars.TitleLevel("一级标题", QFont("微软雅黑", pointSize=20, weight=QFont.Bold), toHtmlFormat="h1")
-    GlobalVars.T2 = globalvars.TitleLevel("二级标题", QFont("微软雅黑", pointSize=16, weight=QFont.Bold), toHtmlFormat="h2")
-    GlobalVars.T3 = globalvars.TitleLevel("三级标题", QFont("微软雅黑", pointSize=14, weight=QFont.Bold), toHtmlFormat="h3")
-    GlobalVars.T4 = globalvars.TitleLevel("四级标题", QFont("微软雅黑", pointSize=12, weight=QFont.Bold), toHtmlFormat="h4")
+    GlobalVars.T0 = globalvars.TitleLevel(
+        "正文", QFont("微软雅黑", pointSize=12, ), toHtmlFormat="p")
+    GlobalVars.T1 = globalvars.TitleLevel("一级标题", QFont(
+        "微软雅黑", pointSize=20, weight=QFont.Bold), toHtmlFormat="h1")
+    GlobalVars.T2 = globalvars.TitleLevel("二级标题", QFont(
+        "微软雅黑", pointSize=16, weight=QFont.Bold), toHtmlFormat="h2")
+    GlobalVars.T3 = globalvars.TitleLevel("三级标题", QFont(
+        "微软雅黑", pointSize=14, weight=QFont.Bold), toHtmlFormat="h3")
+    GlobalVars.T4 = globalvars.TitleLevel("四级标题", QFont(
+        "微软雅黑", pointSize=12, weight=QFont.Bold), toHtmlFormat="h4")
     GlobalVars.CurrentTitleLevel = GlobalVars.T0  # 默认为正文格式
 
 
