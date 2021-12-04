@@ -5,6 +5,8 @@
 
 注：此项目文档编辑部分参考了项目[Doc](https://github.com/yimuchens/doc)，文档纠错部分使用了超过fork数超过2k的[PyCorrector](https://github.com/shibing624/pycorrector)。
 
+**2021/12/3: 新增截图识别文字功能 （由[shaoshenchen](https://github.com/shaoshenchen)贡献）**
+
 # 使用教程
 ## 下载安装
 通过git命令下载该项目，并解压。
@@ -52,6 +54,10 @@
 处理纠错功能之外，工具还具备常见的一些文字编辑功能，如设置字体，大小，斜体，粗体，字体颜色以及背景颜色等。
 
 <img src="https://ai-studio-static-online.cdn.bcebos.com/bba80bf67fba471cb74a0900a4abe3ca7cf4bd6370664a5c851c4e1ff740c4e1" width="600"/>
+
+此外，工具支持了截图文本识别的功能，操作如下：
+
+首先，用windows截图快捷命令Alt + A进行截图；待截图完成后，点击右上角"截"功能按钮，等待识别完成；完成后，使用Ctrl + V快捷键将内容粘贴到文本栏即可。
 
 # 总结和展望
 本项目是一个简单的工具实例demo，具体功能欢迎fork项目进行了解。以后将增加的内容包括：
