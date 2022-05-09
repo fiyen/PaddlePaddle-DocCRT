@@ -6,6 +6,7 @@
 注：此项目文档编辑部分参考了项目[Doc](https://github.com/yimuchens/doc)，文档纠错部分使用了超过fork数超过2k的[PyCorrector](https://github.com/shibing624/pycorrector)。
 
 **2021/12/3: 新增截图识别文字功能 （由[shaoshenchen](https://github.com/shaoshenchen)贡献）**
+
 **2022/05/9: python 版本要求： 3.7 （3.9会报错）**
 
 # 使用教程
